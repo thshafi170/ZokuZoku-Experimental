@@ -1,0 +1,30 @@
+# Build output
+out/
+dist/
+
+# Dependencies
+node_modules/
+
+# Testing
+.vscode-test/
+
+# Packaging
+*.vsix
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*.swo
+*~
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+.cache/

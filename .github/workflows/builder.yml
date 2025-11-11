@@ -1,6 +1,10 @@
 name: Extension Builder
 
+permissions:
+  contents: write
+
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -93,7 +97,7 @@ jobs:
 
       - name: Determine version (main)
         id: version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref_name == 'main')
         run: |
           # Start at v1.0.0 independently (first release)
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.9")
@@ -117,20 +121,13 @@ jobs:
           echo "NEW_TAG=v$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "Version: $NEW_VERSION"
 
-# removed refactor tag step
-        id: version_refactor
-        if: github.event_name == 'push' && github.ref == 'refs/heads/refactor'
-        run: |
-          TAG=$(node -p "const v=require('./package.json').version; const m=v.match(/refactor[.-](\\d+)/); m?('refactor-'+m[1]):'refactor-1'")
-          echo "NEW_TAG=$TAG" >> $GITHUB_OUTPUT
-          echo "Version tag: $TAG"
 
       - name: Generate changelog
         id: changelog
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref_name == 'main')
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
+
           if [ -z "$LATEST_TAG" ]; then
             # First release - get all commits
             CHANGELOG=$(git log --oneline --no-decorate)
@@ -138,7 +135,7 @@ jobs:
             # Get commits since last tag
             CHANGELOG=$(git log ${LATEST_TAG}..HEAD --oneline --no-decorate)
           fi
-          
+
           # Escape newlines for GitHub output
           CHANGELOG="${CHANGELOG//'%'/'%25'}"
           CHANGELOG="${CHANGELOG//$'\n'/'%0A'}"
@@ -146,52 +143,35 @@ jobs:
           echo "CHANGELOG=$CHANGELOG" >> $GITHUB_OUTPUT
 
       - name: Create Pre-release (main)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref_name == 'main')
         uses: softprops/action-gh-release@v1
         with:
           files: "*.vsix"
           tag_name: ${{ steps.version.outputs.NEW_TAG }}
           body: |
-            # FOR TESTING PURPOSES ONLY, DO NOT USE FOR DAILY USE
+            ## FOR TESTING PURPOSES ONLY, DO NOT USE FOR DAILY USE
 
-            This is an experimental build that tracks ZokuZoku-Edge main. It may be unstable and is not intended for daily use.
-
-            ## Changelog
-            ${{ steps.changelog.outputs.CHANGELOG }}
-          draft: false
-          prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-# removed refactor release step
-        if: github.event_name == 'push' && github.ref == 'refs/heads/refactor'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: "*.vsix"
-          tag_name: ${{ steps.version_refactor.outputs.NEW_TAG }}
-          body: |
-            # FOR TESTING PURPOSES ONLY, DO NOT USE FOR DAILY USE
-
-            This is a pre-release build from the refactor branch intended for testing and validation. It may be unstable and is not intended for production or daily use.
+            This is an experimental build that is deviated from ZokuZoku-Edge. It may be unstable and is not intended for daily use.
 
             ## Changelog
             ${{ steps.changelog.outputs.CHANGELOG }}
           draft: false
-          prerelease: true
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
       - name: Update package.json version
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || github.ref_name == 'main')
         run: |
           # Update version in package.json to the computed independent Experimental version
           NEW_VERSION="${{ steps.version.outputs.NEW_VERSION }}"
           sed -i "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" package.json
-          
+
           # Configure git
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
+
           # Commit and push
           git add package.json
           git commit -m "chore: set experimental version to $NEW_VERSION [skip ci]" || echo "No changes to commit"
